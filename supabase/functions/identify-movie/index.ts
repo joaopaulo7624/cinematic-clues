@@ -40,11 +40,13 @@ serve(async (req) => {
           {
             role: "system",
             content: `Você é um especialista em cinema. Sua tarefa é identificar filmes a partir de descrições de cenas.
-            Analise a descrição do usuário e retorne um array JSON com 3 possíveis títulos de filmes em português.
+            Analise a descrição do usuário e retorne um objeto JSON com uma chave "titles", que contém um array de até 3 possíveis títulos de filmes em português.
             Exemplo de entrada: "um homem de terno preto lutando em um prédio, câmera lenta, anos 90"
             Exemplo de saída:
-            ["Matrix", "Duro de Matar", "Equilibrium"]
-            Responda APENAS com o array JSON.`
+            {
+              "titles": ["Matrix", "Duro de Matar", "Equilibrium"]
+            }
+            Responda APENAS com o objeto JSON.`
           },
           {
             role: "user",
@@ -56,13 +58,29 @@ serve(async (req) => {
     });
 
     if (!aiResponse.ok) {
+      const errorBody = await aiResponse.text();
+      console.error("Erro na chamada da IA:", aiResponse.status, errorBody);
       throw new Error(`Erro na chamada da IA: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const suggestedTitles = JSON.parse(aiData.choices[0].message.content).titles;
+    const rawContent = aiData.choices[0]?.message?.content;
 
-    if (!suggestedTitles || suggestedTitles.length === 0) {
+    if (!rawContent) {
+      throw new Error("A IA não retornou um resultado válido.");
+    }
+
+    let parsedContent;
+    try {
+      parsedContent = JSON.parse(rawContent);
+    } catch (e) {
+      console.error("Erro ao fazer parse do JSON da IA:", e, "Conteúdo recebido:", rawContent);
+      throw new Error("A IA retornou um formato de dados inesperado.");
+    }
+
+    const suggestedTitles = parsedContent.titles;
+
+    if (!suggestedTitles || !Array.isArray(suggestedTitles) || suggestedTitles.length === 0) {
       return new Response(JSON.stringify({ movies: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -78,7 +96,7 @@ serve(async (req) => {
       if (!tmdbResponse.ok) return null;
       
       const tmdbData = await tmdbResponse.json();
-      const movie = tmdbData.results[0]; // Pega o resultado mais relevante
+      const movie = tmdbData.results[0];
 
       if (!movie) return null;
 
