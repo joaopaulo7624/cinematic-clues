@@ -1,0 +1,4 @@
+project_id = "qwtqwdweawxglcdewvnh"
+
+[functions.identify-movie]
+verify_jwt = false
