@@ -88,9 +88,7 @@ serve(async (req) => {
     tmdbUrl.searchParams.append("query", searchParams.keywords);
     tmdbUrl.searchParams.append("language", "pt-BR");
     tmdbUrl.searchParams.append("include_adult", "false");
-    if (searchParams.year) {
-      tmdbUrl.searchParams.append("primary_release_year", searchParams.year);
-    }
+    // O filtro de ano foi removido para aumentar a flexibilidade da busca.
 
     const tmdbResponse = await fetch(tmdbUrl);
     if (!tmdbResponse.ok) {
