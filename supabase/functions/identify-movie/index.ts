@@ -21,24 +21,33 @@ serve(async (req) => {
 
   try {
     const { description } = await req.json();
+    console.log("Função recebida com a descrição:", description);
+
     const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY");
 
     if (!TMDB_API_KEY) {
+      console.error("Erro: Chave de API do TMDB não configurada.");
       throw new Error("Chave de API do TMDB não configurada.");
     }
 
     // --- Fase 1: Buscar filmes no TMDB usando a descrição completa ---
     const tmdbUrl = new URL("https://api.themoviedb.org/3/search/movie");
     tmdbUrl.searchParams.append("api_key", TMDB_API_KEY);
-    tmdbUrl.searchParams.append("query", description); // Usando a descrição do usuário diretamente
+    tmdbUrl.searchParams.append("query", description);
     tmdbUrl.searchParams.append("language", "pt-BR");
     tmdbUrl.searchParams.append("include_adult", "false");
 
+    console.log("Buscando na URL do TMDB:", tmdbUrl.toString());
+
     const tmdbResponse = await fetch(tmdbUrl);
+    const tmdbData = await tmdbResponse.json();
+    
+    console.log("Resposta recebida do TMDB:", JSON.stringify(tmdbData, null, 2));
+
     if (!tmdbResponse.ok) {
+      console.error("Erro na API do TMDB:", tmdbResponse.status, tmdbData);
       throw new Error(`Erro na API do TMDB: ${tmdbResponse.status}`);
     }
-    const tmdbData = await tmdbResponse.json();
 
     // --- Fase 2: Formatar a resposta ---
     const movies = tmdbData.results.slice(0, 4).map((movie: any, index: number) => ({
@@ -46,7 +55,6 @@ serve(async (req) => {
       year: movie.release_date ? movie.release_date.split("-")[0] : "N/A",
       description: movie.overview || "Sinopse não disponível.",
       poster_path: movie.poster_path,
-      // A confiança agora é baseada na ordem de resultados do TMDB
       confidence: index === 0 ? "Alta" : index < 2 ? "Média" : "Baixa",
     }));
 
@@ -61,7 +69,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Erro na function:", error);
+    console.error("Erro geral na função:", error);
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return new Response(
       JSON.stringify({ 
