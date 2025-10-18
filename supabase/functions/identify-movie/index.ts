@@ -19,15 +19,24 @@ serve(async (req) => {
   }
 
   try {
+    console.log("--- identify-movie function invoked ---");
     const { description } = await req.json();
+    if (!description) {
+      throw new Error("Descrição não fornecida.");
+    }
+    console.log("Descrição recebida:", description);
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY");
 
     if (!LOVABLE_API_KEY || !TMDB_API_KEY) {
-      throw new Error("Chaves de API não configuradas.");
+      console.error("ERRO: Chaves de API (LOVABLE_API_KEY ou TMDB_API_KEY) não configuradas nos segredos do Supabase.");
+      throw new Error("Chaves de API não configuradas no servidor.");
     }
+    console.log("Chaves de API encontradas. Prosseguindo...");
 
-    // --- Passo 1: Usar IA para adivinhar os títulos dos filmes ---
+    // --- Passo 1: Chamar IA ---
+    console.log("Chamando a IA para obter títulos de filmes...");
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -57,23 +66,28 @@ serve(async (req) => {
       }),
     });
 
+    console.log(`Resposta da IA recebida com status: ${aiResponse.status}`);
+
     if (!aiResponse.ok) {
       const errorBody = await aiResponse.text();
-      console.error("Erro na chamada da IA:", aiResponse.status, errorBody);
-      throw new Error(`Erro na chamada da IA: ${aiResponse.status}`);
+      console.error("ERRO na chamada da IA. Corpo da resposta:", errorBody);
+      throw new Error(`A IA retornou um erro: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
     const rawContent = aiData.choices[0]?.message?.content;
 
     if (!rawContent) {
+      console.error("ERRO: Resposta da IA não continha conteúdo:", JSON.stringify(aiData));
       throw new Error("A IA não retornou um resultado válido.");
     }
+    console.log("Conteúdo bruto da IA:", rawContent);
 
-    // Tenta extrair o bloco JSON da resposta da IA
+    // --- Passo 2: Extrair e parsear JSON ---
+    console.log("Extraindo JSON da resposta da IA...");
     const jsonMatch = rawContent.match(/{[\s\S]*}/);
     if (!jsonMatch) {
-      console.error("Nenhum JSON encontrado na resposta da IA. Conteúdo recebido:", rawContent);
+      console.error("ERRO: Nenhum JSON encontrado na resposta da IA.");
       throw new Error("A IA não retornou um formato de dados reconhecível.");
     }
 
@@ -82,17 +96,21 @@ serve(async (req) => {
     try {
       parsedContent = JSON.parse(jsonString);
     } catch (e) {
-      console.error("Erro ao fazer parse do JSON extraído da IA:", e, "JSON extraído:", jsonString);
+      console.error("ERRO ao fazer parse do JSON extraído:", e, "JSON String:", jsonString);
       throw new Error("A IA retornou um formato de dados inesperado.");
     }
+    console.log("JSON parseado com sucesso.");
 
     const suggestedTitles = parsedContent.titles;
 
     if (!suggestedTitles || !Array.isArray(suggestedTitles) || suggestedTitles.length === 0) {
+      console.log("Nenhum título sugerido pela IA. Retornando array vazio.");
       return new Response(JSON.stringify({ movies: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    console.log("Títulos sugeridos:", suggestedTitles.join(", "));
 
-    // --- Passo 2: Buscar detalhes de cada filme sugerido no TMDB ---
+    // --- Passo 3: Buscar detalhes de cada filme sugerido no TMDB ---
+    console.log("Buscando detalhes dos filmes no TMDB...");
     const moviePromises = suggestedTitles.slice(0, 3).map(async (title: string) => {
       if (typeof title !== 'string' || !title.trim()) return null;
       
@@ -103,12 +121,18 @@ serve(async (req) => {
       tmdbUrl.searchParams.append("include_adult", "false");
 
       const tmdbResponse = await fetch(tmdbUrl);
-      if (!tmdbResponse.ok) return null;
+      if (!tmdbResponse.ok) {
+        console.warn(`Aviso: A chamada ao TMDB para "${title}" falhou com status ${tmdbResponse.status}`);
+        return null;
+      }
       
       const tmdbData = await tmdbResponse.json();
       const movie = tmdbData.results[0];
 
-      if (!movie) return null;
+      if (!movie) {
+        console.warn(`Aviso: Nenhum resultado no TMDB para "${title}"`);
+        return null;
+      }
 
       return {
         title: movie.title,
@@ -119,21 +143,23 @@ serve(async (req) => {
     });
 
     const movieDetails = (await Promise.all(moviePromises)).filter(Boolean);
+    console.log(`Encontrados ${movieDetails.length} filmes no TMDB.`);
 
-    // --- Passo 3: Formatar a resposta final com nível de confiança ---
+    // --- Passo 4: Formatar a resposta final com nível de confiança ---
     const movies = movieDetails.map((movie, index) => ({
       ...movie,
       confidence: index === 0 ? "Alta" : index === 1 ? "Média" : "Baixa",
     }));
 
+    console.log("Retornando resultados formatados com sucesso.");
     return new Response(
       JSON.stringify({ movies }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error("Erro na função identify-movie:", error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error("--- ERRO FATAL na função identify-movie ---", error);
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido no servidor';
     return new Response(
       JSON.stringify({ error: errorMessage, movies: [] }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
