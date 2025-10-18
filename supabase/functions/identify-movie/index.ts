@@ -2,7 +2,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 // Declare the Deno global to resolve TypeScript errors in the local environment.
-// This does not affect the Deno runtime.
 declare const Deno: {
   env: {
     get: (key: string) => string | undefined;
@@ -21,68 +20,95 @@ serve(async (req) => {
 
   try {
     const { description } = await req.json();
-    console.log("Função recebida com a descrição:", description);
-
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY");
 
-    if (!TMDB_API_KEY) {
-      console.error("Erro: Chave de API do TMDB não configurada.");
-      throw new Error("Chave de API do TMDB não configurada.");
+    if (!LOVABLE_API_KEY || !TMDB_API_KEY) {
+      throw new Error("Chaves de API não configuradas.");
     }
 
-    // --- Fase 1: Buscar filmes no TMDB usando a descrição completa ---
-    const tmdbUrl = new URL("https://api.themoviedb.org/3/search/movie");
-    tmdbUrl.searchParams.append("api_key", TMDB_API_KEY);
-    tmdbUrl.searchParams.append("query", description);
-    tmdbUrl.searchParams.append("language", "pt-BR");
-    tmdbUrl.searchParams.append("include_adult", "false");
+    // --- Passo 1: Usar IA para adivinhar os títulos dos filmes ---
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-1.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: `Você é um especialista em cinema. Sua tarefa é identificar filmes a partir de descrições de cenas.
+            Analise a descrição do usuário e retorne um array JSON com 3 possíveis títulos de filmes em português.
+            Exemplo de entrada: "um homem de terno preto lutando em um prédio, câmera lenta, anos 90"
+            Exemplo de saída:
+            ["Matrix", "Duro de Matar", "Equilibrium"]
+            Responda APENAS com o array JSON.`
+          },
+          {
+            role: "user",
+            content: description
+          }
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
 
-    console.log("Buscando na URL do TMDB:", tmdbUrl.toString());
-
-    const tmdbResponse = await fetch(tmdbUrl);
-    const tmdbData = await tmdbResponse.json();
-    
-    console.log("Resposta recebida do TMDB:", JSON.stringify(tmdbData, null, 2));
-
-    if (!tmdbResponse.ok) {
-      console.error("Erro na API do TMDB:", tmdbResponse.status, tmdbData);
-      throw new Error(`Erro na API do TMDB: ${tmdbResponse.status}`);
+    if (!aiResponse.ok) {
+      throw new Error(`Erro na chamada da IA: ${aiResponse.status}`);
     }
 
-    // --- Fase 2: Formatar a resposta ---
-    const movies = tmdbData.results.slice(0, 4).map((movie: any, index: number) => ({
-      title: movie.title,
-      year: movie.release_date ? movie.release_date.split("-")[0] : "N/A",
-      description: movie.overview || "Sinopse não disponível.",
-      poster_path: movie.poster_path,
-      confidence: index === 0 ? "Alta" : index < 2 ? "Média" : "Baixa",
+    const aiData = await aiResponse.json();
+    const suggestedTitles = JSON.parse(aiData.choices[0].message.content).titles;
+
+    if (!suggestedTitles || suggestedTitles.length === 0) {
+      return new Response(JSON.stringify({ movies: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // --- Passo 2: Buscar detalhes de cada filme sugerido no TMDB ---
+    const moviePromises = suggestedTitles.map(async (title: string) => {
+      const tmdbUrl = new URL("https://api.themoviedb.org/3/search/movie");
+      tmdbUrl.searchParams.append("api_key", TMDB_API_KEY);
+      tmdbUrl.searchParams.append("query", title);
+      tmdbUrl.searchParams.append("language", "pt-BR");
+      tmdbUrl.searchParams.append("include_adult", "false");
+
+      const tmdbResponse = await fetch(tmdbUrl);
+      if (!tmdbResponse.ok) return null;
+      
+      const tmdbData = await tmdbResponse.json();
+      const movie = tmdbData.results[0]; // Pega o resultado mais relevante
+
+      if (!movie) return null;
+
+      return {
+        title: movie.title,
+        year: movie.release_date ? movie.release_date.split("-")[0] : "N/A",
+        description: movie.overview || "Sinopse não disponível.",
+        poster_path: movie.poster_path,
+      };
+    });
+
+    const movieDetails = (await Promise.all(moviePromises)).filter(Boolean);
+
+    // --- Passo 3: Formatar a resposta final com nível de confiança ---
+    const movies = movieDetails.map((movie, index) => ({
+      ...movie,
+      confidence: index === 0 ? "Alta" : index === 1 ? "Média" : "Baixa",
     }));
 
     return new Response(
       JSON.stringify({ movies }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error("Erro geral na função:", error);
+    console.error("Erro na função identify-movie:", error);
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return new Response(
-      JSON.stringify({ 
-        error: errorMessage,
-        movies: []
-      }),
-      { 
-        status: 500,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
+      JSON.stringify({ error: errorMessage, movies: [] }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
