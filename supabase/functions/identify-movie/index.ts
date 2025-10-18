@@ -70,21 +70,19 @@ serve(async (req) => {
       throw new Error("A IA não retornou um resultado válido.");
     }
 
-    // Limpa a resposta da IA para remover possíveis marcações de código
-    let cleanedContent = rawContent.trim();
-    if (cleanedContent.startsWith("```json")) {
-      cleanedContent = cleanedContent.substring(7);
+    // Tenta extrair o bloco JSON da resposta da IA
+    const jsonMatch = rawContent.match(/{[\s\S]*}/);
+    if (!jsonMatch) {
+      console.error("Nenhum JSON encontrado na resposta da IA. Conteúdo recebido:", rawContent);
+      throw new Error("A IA não retornou um formato de dados reconhecível.");
     }
-    if (cleanedContent.endsWith("```")) {
-      cleanedContent = cleanedContent.slice(0, -3);
-    }
-    cleanedContent = cleanedContent.trim();
 
+    const jsonString = jsonMatch[0];
     let parsedContent;
     try {
-      parsedContent = JSON.parse(cleanedContent);
+      parsedContent = JSON.parse(jsonString);
     } catch (e) {
-      console.error("Erro ao fazer parse do JSON da IA:", e, "Conteúdo recebido:", rawContent);
+      console.error("Erro ao fazer parse do JSON extraído da IA:", e, "JSON extraído:", jsonString);
       throw new Error("A IA retornou um formato de dados inesperado.");
     }
 
@@ -95,7 +93,9 @@ serve(async (req) => {
     }
 
     // --- Passo 2: Buscar detalhes de cada filme sugerido no TMDB ---
-    const moviePromises = suggestedTitles.map(async (title: string) => {
+    const moviePromises = suggestedTitles.slice(0, 3).map(async (title: string) => {
+      if (typeof title !== 'string' || !title.trim()) return null;
+      
       const tmdbUrl = new URL("https://api.themoviedb.org/3/search/movie");
       tmdbUrl.searchParams.append("api_key", TMDB_API_KEY);
       tmdbUrl.searchParams.append("query", title);
