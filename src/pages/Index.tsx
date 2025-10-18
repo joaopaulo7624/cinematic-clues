@@ -25,6 +25,7 @@ const Index = () => {
     }
 
     setIsLoading(true);
+    setResults([]);
     try {
       const { data, error } = await supabase.functions.invoke("identify-movie", {
         body: { description },
@@ -40,11 +41,19 @@ const Index = () => {
           description: "Tente descrever com mais detalhes ou use palavras-chave diferentes.",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error:", error);
+      let errorMessage = "Não foi possível processar sua solicitação. Tente novamente.";
+      // Tentamos extrair a mensagem de erro específica da resposta da função
+      if (error.context && typeof error.context.error === 'string') {
+        errorMessage = error.context.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Erro",
-        description: "Não foi possível processar sua solicitação. Tente novamente.",
+        title: "Erro na busca",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
