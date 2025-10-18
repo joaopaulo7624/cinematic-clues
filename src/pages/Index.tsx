@@ -32,6 +32,11 @@ const Index = () => {
       });
 
       if (error) throw error;
+      
+      // A função pode retornar um erro dentro do corpo de dados em caso de falha controlada
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
       setResults(data.movies || []);
       
@@ -42,12 +47,11 @@ const Index = () => {
         });
       }
     } catch (error: any) {
-      console.error("Error:", error);
+      console.error("Erro ao invocar a função:", error);
       let errorMessage = "Não foi possível processar sua solicitação. Tente novamente.";
-      // Tentamos extrair a mensagem de erro específica da resposta da função
-      if (error.context && typeof error.context.error === 'string') {
-        errorMessage = error.context.error;
-      } else if (error.message) {
+      
+      // Prioriza a mensagem de erro vinda diretamente da função
+      if (error.message) {
         errorMessage = error.message;
       }
       

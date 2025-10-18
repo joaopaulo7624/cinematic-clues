@@ -70,9 +70,19 @@ serve(async (req) => {
       throw new Error("A IA não retornou um resultado válido.");
     }
 
+    // Limpa a resposta da IA para remover possíveis marcações de código
+    let cleanedContent = rawContent.trim();
+    if (cleanedContent.startsWith("```json")) {
+      cleanedContent = cleanedContent.substring(7);
+    }
+    if (cleanedContent.endsWith("```")) {
+      cleanedContent = cleanedContent.slice(0, -3);
+    }
+    cleanedContent = cleanedContent.trim();
+
     let parsedContent;
     try {
-      parsedContent = JSON.parse(rawContent);
+      parsedContent = JSON.parse(cleanedContent);
     } catch (e) {
       console.error("Erro ao fazer parse do JSON da IA:", e, "Conteúdo recebido:", rawContent);
       throw new Error("A IA retornou um formato de dados inesperado.");
