@@ -37,16 +37,23 @@ const fetchPosts = async () => {
       is_solved,
       solution,
       user_id,
-      profiles:user_id ( username, avatar_url ),
-      likes ( count ),
-      replies ( count )
+      profiles:profiles!user_id(username, avatar_url),
+      likes(count),
+      replies(count)
     `)
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error("Supabase error fetching posts:", error);
     throw new Error(error.message);
   }
-  return data as Post[];
+  // Supabase returns an array for the joined item, so we flatten it.
+  const formattedData = data?.map(post => ({
+    ...post,
+    profiles: Array.isArray(post.profiles) ? post.profiles[0] : post.profiles,
+  }));
+  
+  return formattedData as Post[];
 };
 
 const Community = () => {
