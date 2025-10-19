@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import MovieResults from "@/components/MovieResults";
 import HeroSection from "@/components/HeroSection";
-import { Link } from "react-router-dom";
+import Header from "@/components/Header";
 
 const Index = () => {
   const [description, setDescription] = useState("");
@@ -67,28 +67,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen cinema-gradient">
-      {/* Header */}
-      <header className="glass-card border-b border-white/10 sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="relative">
-              <Film className="w-8 h-8 text-primary group-hover:rotate-12 transition-all duration-300" />
-              <div className="absolute inset-0 blur-xl bg-primary/20 group-hover:bg-primary/40 transition-all duration-300"></div>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'Cinzel', serif" }}>
-              Scene<span className="text-gradient">Memory</span>
-            </h1>
-          </Link>
-          <nav className="flex gap-8">
-            <Link to="/" className="text-foreground/90 hover:text-primary transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300">
-              Início
-            </Link>
-            <Link to="/community" className="text-foreground/90 hover:text-primary transition-all duration-300 font-medium relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all after:duration-300">
-              Comunidade
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <HeroSection />
 

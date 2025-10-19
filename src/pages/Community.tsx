@@ -1,47 +1,87 @@
 import { useState } from "react";
-import { Film, MessageSquare, ThumbsUp } from "lucide-react";
+import { Film, MessageSquare, ThumbsUp, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import Header from "@/components/Header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-// Mock data - em produção viria do banco de dados
-const mockPosts = [
-  {
-    id: 1,
-    description: "Filme de ação onde um policial fica preso em um prédio no Natal, lutando contra terroristas...",
-    author: "João Silva",
-    date: "Há 2 horas",
-    answers: 3,
-    likes: 12,
-    solved: true,
-    solution: "Duro de Matar (1988)"
-  },
-  {
-    id: 2,
-    description: "Animação sobre um chef de cozinha, mas o chef é na verdade um rato que controla um humano...",
-    author: "Maria Santos",
-    date: "Há 5 horas",
-    answers: 5,
-    likes: 8,
-    solved: true,
-    solution: "Ratatouille (2007)"
-  },
-  {
-    id: 3,
-    description: "Drama sobre um pianista que sonha em ser músico de jazz, mas a família quer que ele seja professor...",
-    author: "Pedro Costa",
-    date: "Há 1 dia",
-    answers: 2,
-    likes: 5,
-    solved: false
+type Post = {
+  id: string;
+  description: string;
+  created_at: string;
+  is_solved: boolean;
+  solution: string | null;
+  user_id: string;
+  profiles: {
+    username: string | null;
+    avatar_url: string | null;
+  } | null;
+  likes: { count: number }[];
+  replies: { count: number }[];
+};
+
+const fetchPosts = async () => {
+  const { data, error } = await supabase
+    .from("posts")
+    .select(`
+      id,
+      description,
+      created_at,
+      is_solved,
+      solution,
+      user_id,
+      profiles ( username, avatar_url ),
+      likes ( count ),
+      replies ( count )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
   }
-];
+  return data as Post[];
+};
 
 const Community = () => {
   const [newPost, setNewPost] = useState("");
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
+
+  const { data: posts, isLoading: postsLoading, error } = useQuery({
+    queryKey: ["community_posts"],
+    queryFn: fetchPosts,
+  });
+
+  const createPostMutation = useMutation({
+    mutationFn: async (description: string) => {
+      if (!user) throw new Error("Você precisa estar logado para postar.");
+      const { error } = await supabase.from("posts").insert([{ description, user_id: user.id }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["community_posts"] });
+      setNewPost("");
+      toast({
+        title: "Pergunta publicada!",
+        description: "A comunidade vai ajudar você a encontrar o filme.",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Erro ao publicar",
+        description: err.message || "Não foi possível publicar sua pergunta.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSubmitPost = () => {
     if (!newPost.trim()) {
@@ -52,38 +92,14 @@ const Community = () => {
       });
       return;
     }
-
-    toast({
-      title: "Pergunta publicada!",
-      description: "A comunidade vai ajudar você a encontrar o filme.",
-    });
-    setNewPost("");
+    createPostMutation.mutate(newPost);
   };
 
   return (
     <div className="min-h-screen cinema-gradient">
-      {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
-            <Film className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
-            <h1 className="text-2xl font-bold" style={{ fontFamily: "'Cinzel', serif" }}>
-              Scene<span className="text-primary">Memory</span>
-            </h1>
-          </Link>
-          <nav className="flex gap-6">
-            <Link to="/" className="text-foreground hover:text-primary transition-colors">
-              Início
-            </Link>
-            <Link to="/community" className="text-primary transition-colors">
-              Comunidade
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <div className="container mx-auto px-4 py-16 max-w-6xl">
-        {/* Hero Section */}
         <div className="text-center mb-16">
           <h2 
             className="text-4xl md:text-5xl font-bold mb-4"
@@ -96,7 +112,6 @@ const Community = () => {
           </p>
         </div>
 
-        {/* Create Post Section */}
         <Card className="mb-12 border-primary/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -104,7 +119,7 @@ const Community = () => {
               Peça ajuda à comunidade
             </CardTitle>
             <CardDescription>
-              Descreva o filme que você está procurando e outros usuários vão te ajudar
+              {user ? "Descreva o filme que você está procurando e outros usuários vão te ajudar." : "Faça login para publicar uma pergunta e ajudar outros usuários."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -113,55 +128,85 @@ const Community = () => {
               value={newPost}
               onChange={(e) => setNewPost(e.target.value)}
               className="min-h-[120px] mb-4"
+              disabled={!user || createPostMutation.isPending}
             />
-            <Button onClick={handleSubmitPost} className="w-full">
-              Publicar pergunta
+            <Button 
+              onClick={handleSubmitPost} 
+              className="w-full"
+              disabled={!user || createPostMutation.isPending || !newPost.trim()}
+            >
+              {createPostMutation.isPending ? "Publicando..." : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Publicar pergunta
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Posts List */}
         <div className="space-y-6">
           <h3 className="text-2xl font-semibold mb-6">Perguntas recentes</h3>
           
-          {mockPosts.map((post) => (
-            <Card key={post.id} className="border-border/50 hover:border-primary/30 transition-all">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardDescription className="mb-2">
-                      Por {post.author} • {post.date}
-                    </CardDescription>
-                    <p className="text-foreground leading-relaxed mb-3">
-                      {post.description}
-                    </p>
-                    {post.solved && (
-                      <div className="inline-flex items-center gap-2 bg-primary/20 text-primary px-3 py-1 rounded-full text-sm">
-                        <Film className="w-4 h-4" />
-                        Resolvido: {post.solution}
-                      </div>
-                    )}
+          {postsLoading || authLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="border-border/50 p-6">
+                <CardHeader>
+                  <Skeleton className="h-4 w-[250px] mb-4" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-[80%] mb-2" />
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-6">
+                    <Skeleton className="h-6 w-[100px]" />
+                    <Skeleton className="h-6 w-[60px]" />
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                  <button className="flex items-center gap-2 hover:text-primary transition-colors">
-                    <MessageSquare className="w-4 h-4" />
-                    {post.answers} respostas
-                  </button>
-                  <button className="flex items-center gap-2 hover:text-primary transition-colors">
-                    <ThumbsUp className="w-4 h-4" />
-                    {post.likes}
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          ) : error ? (
+            <p className="text-destructive text-center">Erro ao carregar as perguntas.</p>
+          ) : posts && posts.length > 0 ? (
+            posts.map((post) => (
+              <Card key={post.id} className="border-border/50 hover:border-primary/30 transition-all">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardDescription className="mb-2">
+                        Por {post.profiles?.username || 'Usuário anônimo'} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ptBR })}
+                      </CardDescription>
+                      <p className="text-foreground leading-relaxed mb-3">
+                        {post.description}
+                      </p>
+                      {post.is_solved && (
+                        <div className="inline-flex items-center gap-2 bg-primary/20 text-primary px-3 py-1 rounded-full text-sm">
+                          <Film className="w-4 h-4" />
+                          Resolvido: {post.solution}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                    <button className="flex items-center gap-2 hover:text-primary transition-colors">
+                      <MessageSquare className="w-4 h-4" />
+                      {post.replies[0]?.count || 0} respostas
+                    </button>
+                    <button className="flex items-center gap-2 hover:text-primary transition-colors">
+                      <ThumbsUp className="w-4 h-4" />
+                      {post.likes[0]?.count || 0}
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <p className="text-muted-foreground text-center py-8">Nenhuma pergunta por aqui ainda. Seja o primeiro a postar!</p>
+          )}
         </div>
       </div>
 
-      {/* Footer */}
       <footer className="border-t border-border/50 mt-20 py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
           <p>© 2025 SceneMemory - Lembrar de um filme nunca foi tão fácil</p>
