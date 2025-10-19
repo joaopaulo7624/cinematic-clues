@@ -37,7 +37,7 @@ const fetchReplies = async (postId: string) => {
     .order('created_at', { ascending: true });
 
   if (error) throw new Error(error.message);
-  return data as Reply[];
+  return data as unknown as Reply[];
 };
 
 const PostDetailsDialog = ({ post, onOpenChange }: { post: Post | null; onOpenChange: (open: boolean) => void }) => {
