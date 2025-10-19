@@ -26,7 +26,7 @@ type Post = {
     avatar_url: string | null;
   } | null;
   likes: { user_id: string }[];
-  replies: { count: number }[];
+  replies: { id: string }[]; // Updated type
 };
 
 const fetchPosts = async (userId?: string) => {
@@ -39,9 +39,9 @@ const fetchPosts = async (userId?: string) => {
       is_solved,
       solution,
       user_id,
-      profiles!user_id(username, avatar_url),
+      profiles(username, avatar_url),
       likes(user_id),
-      replies(count)
+      replies(id)
     `)
     .order("created_at", { ascending: false });
 
@@ -149,7 +149,7 @@ const Community = () => {
                   <CardContent>
                     <div className="flex items-center gap-6 text-sm text-muted-foreground">
                       <Button variant="ghost" size="sm" className="flex items-center gap-2 hover:text-primary" onClick={() => setViewingPost(post)}>
-                        <MessageSquare className="w-4 h-4" />{post.replies[0]?.count || 0} respostas
+                        <MessageSquare className="w-4 h-4" />{post.replies.length} respostas
                       </Button>
                       <Button variant="ghost" size="sm" className={cn("flex items-center gap-2 hover:text-primary", isLiked && "text-primary")} onClick={() => user && toggleLikeMutation.mutate({ postId: post.id, isLiked })} disabled={!user || toggleLikeMutation.isPending}>
                         <ThumbsUp className={cn("w-4 h-4", isLiked && "fill-current")} />{post.likes.length}
