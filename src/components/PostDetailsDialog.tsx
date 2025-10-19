@@ -32,7 +32,7 @@ type Reply = {
 const fetchReplies = async (postId: string) => {
   const { data, error } = await supabase
     .from('replies')
-    .select('id, content, created_at, profiles(username, avatar_url)')
+    .select('id, content, created_at, profiles!user_id(username, avatar_url)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
