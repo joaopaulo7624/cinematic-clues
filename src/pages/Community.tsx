@@ -37,7 +37,7 @@ const fetchPosts = async () => {
       is_solved,
       solution,
       user_id,
-      profiles ( username, avatar_url ),
+      profiles!inner( username, avatar_url ),
       likes ( count ),
       replies ( count )
     `)
