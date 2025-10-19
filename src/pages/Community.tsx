@@ -27,26 +27,12 @@ type Post = {
   user_id: string;
   likes: { user_id: string }[];
   replies: { count: number }[];
-  profiles: {
-    username: string | null;
-    avatar_url: string | null;
-  } | null;
 };
 
 const fetchPosts = async (userId?: string) => {
   const { data, error } = await supabase
     .from("posts")
-    .select(`
-      id,
-      description,
-      created_at,
-      is_solved,
-      solution,
-      user_id,
-      likes(user_id),
-      replies(count),
-      profiles(username, avatar_url)
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -58,7 +44,7 @@ const fetchPosts = async (userId?: string) => {
 
 const Community = () => {
   const [newPost, setNewPost] = useState("");
-  const [viewingPost, setViewingPost] = useState<Post | null>(null);
+  const [viewingPost, setViewingPost] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "solved" | "unsolved">("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "most_liked" | "most_replied">("newest");
@@ -83,8 +69,7 @@ const Community = () => {
       // Filtro por busca
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
-        return post.description.toLowerCase().includes(searchLower) ||
-               post.profiles?.username?.toLowerCase().includes(searchLower);
+        return post.description.toLowerCase().includes(searchLower);
       }
 
       return true;
@@ -166,15 +151,6 @@ const Community = () => {
   const handleSubmitPost = () => {
     if (!newPost.trim()) return;
     createPostMutation.mutate(newPost);
-  };
-
-  const getUserDisplayName = (post: Post) => {
-    return post.profiles?.username || "Usuário Anônimo";
-  };
-
-  const getUserInitials = (post: Post) => {
-    const name = getUserDisplayName(post);
-    return name === "Usuário Anônimo" ? "?" : name.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -272,13 +248,12 @@ const Community = () => {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10">
-                          <AvatarImage src={post.profiles?.avatar_url || undefined} />
                           <AvatarFallback className="bg-primary/10 text-primary">
-                            {getUserInitials(post)}
+                            {post.user_id.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium text-foreground">{getUserDisplayName(post)}</p>
+                          <p className="font-medium text-foreground">Usuário</p>
                           <p className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ptBR })}
                           </p>
