@@ -40,8 +40,8 @@ serve(async (req) => {
     console.log("Chaves de API encontradas. Prosseguindo...");
 
     // --- Passo 1: Chamar a API do Google Gemini ---
-    console.log("Chamando a API do Google Gemini com o modelo gemini-pro...");
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    console.log("Chamando a API do Google Gemini com o modelo gemini-2.5-flash...");
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     const prompt = `Você é um especialista em cinema. Sua tarefa é identificar filmes a partir de descrições de cenas.
     Analise a seguinte descrição do usuário e retorne um objeto JSON com uma chave "titles", que contém um array de até 3 possíveis títulos de filmes em português.
@@ -152,7 +152,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("--- ERRO FATAL na função identify-movie ---", error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconquecido no servidor';
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido no servidor';
     return new Response(
       JSON.stringify({ error: errorMessage, movies: [] }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
