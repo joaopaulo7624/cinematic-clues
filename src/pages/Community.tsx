@@ -14,6 +14,7 @@ import { ptBR } from 'date-fns/locale';
 import PostDetailsDialog from "@/components/PostDetailsDialog";
 import { cn } from "@/lib/utils";
 
+// Simplificando o tipo para corresponder à consulta simplificada
 type Post = {
   id: string;
   description: string;
@@ -21,35 +22,20 @@ type Post = {
   is_solved: boolean;
   solution: string | null;
   user_id: string;
-  profiles: {
-    username: string | null;
-    avatar_url: string | null;
-  } | null;
-  likes: { user_id: string }[];
-  replies: { id: string }[]; // Updated type
 };
 
-const fetchPosts = async (userId?: string) => {
+// Consulta extremamente simplificada para testar a conexão
+const fetchPosts = async () => {
   const { data, error } = await supabase
     .from("posts")
-    .select(`
-      id,
-      description,
-      created_at,
-      is_solved,
-      solution,
-      user_id,
-      profiles(username, avatar_url),
-      likes(user_id),
-      replies(id)
-    `)
+    .select("id, description, created_at, is_solved, solution, user_id")
     .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Supabase error fetching posts:", error);
     throw new Error(error.message);
   }
-  return data as unknown as Post[];
+  return data;
 };
 
 const Community = () => {
@@ -60,8 +46,8 @@ const Community = () => {
   const queryClient = useQueryClient();
 
   const { data: posts, isLoading: postsLoading, error } = useQuery({
-    queryKey: ["community_posts", user?.id],
-    queryFn: () => fetchPosts(user?.id),
+    queryKey: ["community_posts"],
+    queryFn: fetchPosts,
   });
 
   const createPostMutation = useMutation({
@@ -80,25 +66,6 @@ const Community = () => {
     },
   });
 
-  const toggleLikeMutation = useMutation({
-    mutationFn: async ({ postId, isLiked }: { postId: string; isLiked: boolean }) => {
-      if (!user) throw new Error("Você precisa estar logado para curtir.");
-      if (isLiked) {
-        const { error } = await supabase.from('likes').delete().match({ post_id: postId, user_id: user.id });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('likes').insert({ post_id: postId, user_id: user.id });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["community_posts"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    },
-  });
-
   const handleSubmitPost = () => {
     if (!newPost.trim()) return;
     createPostMutation.mutate(newPost);
@@ -107,7 +74,8 @@ const Community = () => {
   return (
     <div className="min-h-screen cinema-gradient">
       <Header />
-      <PostDetailsDialog post={viewingPost} onOpenChange={() => setViewingPost(null)} />
+      {/* PostDetailsDialog está desativado por enquanto */}
+      {/* <PostDetailsDialog post={viewingPost} onOpenChange={() => setViewingPost(null)} /> */}
 
       <div className="container mx-auto px-4 py-16 max-w-6xl">
         <div className="text-center mb-16">
@@ -135,30 +103,22 @@ const Community = () => {
           {postsLoading || authLoading ? (
             Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
           ) : error ? (
-            <p className="text-destructive text-center">Erro ao carregar as perguntas.</p>
+            <p className="text-destructive text-center">Erro ao carregar as perguntas: {error.message}</p>
           ) : posts && posts.length > 0 ? (
-            posts.map((post) => {
-              const isLiked = user ? post.likes.some(like => like.user_id === user.id) : false;
-              return (
-                <Card key={post.id} className="border-border/50 hover:border-primary/30 transition-all">
-                  <CardHeader>
-                    <CardDescription className="mb-2">Por {post.profiles?.username || 'Usuário anônimo'} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ptBR })}</CardDescription>
-                    <p className="text-foreground leading-relaxed mb-3">{post.description}</p>
-                    {post.is_solved && <div className="inline-flex items-center gap-2 bg-primary/20 text-primary px-3 py-1 rounded-full text-sm"><Film className="w-4 h-4" />Resolvido: {post.solution}</div>}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                      <Button variant="ghost" size="sm" className="flex items-center gap-2 hover:text-primary" onClick={() => setViewingPost(post)}>
-                        <MessageSquare className="w-4 h-4" />{post.replies.length} respostas
-                      </Button>
-                      <Button variant="ghost" size="sm" className={cn("flex items-center gap-2 hover:text-primary", isLiked && "text-primary")} onClick={() => user && toggleLikeMutation.mutate({ postId: post.id, isLiked })} disabled={!user || toggleLikeMutation.isPending}>
-                        <ThumbsUp className={cn("w-4 h-4", isLiked && "fill-current")} />{post.likes.length}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+            posts.map((post) => (
+              <Card key={post.id} className="border-border/50 hover:border-primary/30 transition-all">
+                <CardHeader>
+                  <CardDescription className="mb-2">Por Usuário Anônimo • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ptBR })}</CardDescription>
+                  <p className="text-foreground leading-relaxed mb-3">{post.description}</p>
+                  {post.is_solved && <div className="inline-flex items-center gap-2 bg-primary/20 text-primary px-3 py-1 rounded-full text-sm"><Film className="w-4 h-4" />Resolvido: {post.solution}</div>}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                    <span className="text-muted-foreground">Funcionalidades de curtir e responder desativadas temporariamente.</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           ) : (
             <p className="text-muted-foreground text-center py-8">Nenhuma pergunta por aqui ainda. Seja o primeiro a postar!</p>
           )}
