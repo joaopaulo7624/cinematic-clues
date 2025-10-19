@@ -44,8 +44,7 @@ const fetchPosts = async (userId?: string) => {
       solution,
       user_id,
       likes(user_id),
-      replies(count),
-      profiles(username, avatar_url)
+      replies(count)
     `)
     .order("created_at", { ascending: false });
 
