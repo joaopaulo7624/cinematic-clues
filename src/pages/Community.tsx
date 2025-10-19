@@ -34,18 +34,9 @@ type Post = {
 };
 
 const fetchPosts = async (userId?: string) => {
-  // Use a single‑line select string to avoid parsing issues with Supabase/PostgREST
-  const selectString = `
-    id,
-    description,
-    created_at,
-    is_solved,
-    solution,
-    user_id,
-    likes(user_id),
-    profiles(username, avatar_url),
-    replies(count)
-  `;
+  // String de seleção em **uma única linha** – evita problemas de parsing no Supabase
+  const selectString =
+    "id,description,created_at,is_solved,solution,user_id,likes(user_id),profiles(username,avatar_url),replies(count)";
 
   const { data, error } = await supabase
     .from("posts")
@@ -53,6 +44,7 @@ const fetchPosts = async (userId?: string) => {
     .order("created_at", { ascending: false });
 
   if (error) {
+    // Log detalhado para depuração
     console.error("Supabase fetchPosts error:", error);
     throw new Error(error.message);
   }
@@ -69,16 +61,18 @@ const Community = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: posts, isLoading: postsLoading, error } = useQuery({
+  // Tipagem explícita para o useQuery elimina o erro de “onError” e garante que `posts` seja Post[] | undefined
+  const { data: posts, isLoading: postsLoading, error } = useQuery<Post[], Error>({
     queryKey: ["community_posts", user?.id],
     queryFn: () => fetchPosts(user?.id),
+    // Removido onError (não é necessário; o erro já está disponível via `error`)
   });
 
-  // Filtrar e ordenar posts
   const filteredAndSortedPosts = useMemo(() => {
     if (!posts) return [];
 
-    let filtered = posts.filter((post) => {
+    // `posts` agora tem tipo Post[], então .filter está disponível
+    const filtered = posts.filter((post) => {
       if (statusFilter === "solved" && !post.is_solved) return false;
       if (statusFilter === "unsolved" && post.is_solved) return false;
 
