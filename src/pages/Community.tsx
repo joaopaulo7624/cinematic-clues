@@ -44,7 +44,8 @@ const fetchPosts = async (userId?: string) => {
       solution,
       user_id,
       likes(user_id),
-      replies(count)
+      replies(count),
+      profiles(username, avatar_url)
     `)
     .order("created_at", { ascending: false });
 
@@ -136,6 +137,7 @@ const Community = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["community_posts"] });
+      toast({ title: "Like atualizado!" });
     },
     onError: (err: any) => {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
