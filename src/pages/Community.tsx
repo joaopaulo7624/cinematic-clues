@@ -34,13 +34,19 @@ type Post = {
 };
 
 const fetchPosts = async (userId?: string) => {
+  // Re-introducing the joins with explicit count for replies and selecting necessary fields
   const { data, error } = await supabase
     .from("posts")
     .select(`
-      *,
+      id,
+      description,
+      created_at,
+      is_solved,
+      solution,
+      user_id,
       likes(user_id),
-      replies(count),
-      profiles(username, avatar_url)
+      profiles(username, avatar_url),
+      replies(count)
     `)
     .order("created_at", { ascending: false });
 
