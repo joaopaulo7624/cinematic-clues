@@ -23,7 +23,7 @@ type Post = {
   user_id: string;
   likes: { user_id: string }[];
   replies: { count: number }[];
-  profiles?: {
+  profiles: {
     username: string | null;
     avatar_url: string | null;
   } | null;
