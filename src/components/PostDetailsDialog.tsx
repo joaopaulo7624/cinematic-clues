@@ -16,6 +16,7 @@ type Post = {
   description: string;
   profiles: {
     username: string | null;
+    avatar_url: string | null;
   } | null;
 };
 

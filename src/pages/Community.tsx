@@ -25,14 +25,23 @@ type Post = {
   is_solved: boolean;
   solution: string | null;
   user_id: string;
-  likes: { user_id: string }[];
-  replies: { count: number }[];
+  likes: { user_id: string }[] | null;
+  replies: { count: number }[] | null;
+  profiles: {
+    username: string | null;
+    avatar_url: string | null;
+  } | null;
 };
 
 const fetchPosts = async (userId?: string) => {
   const { data, error } = await supabase
     .from("posts")
-    .select("*")
+    .select(`
+      *,
+      likes(user_id),
+      replies(count),
+      profiles(username, avatar_url)
+    `)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -44,7 +53,7 @@ const fetchPosts = async (userId?: string) => {
 
 const Community = () => {
   const [newPost, setNewPost] = useState("");
-  const [viewingPost, setViewingPost] = useState<any>(null);
+  const [viewingPost, setViewingPost] = useState<Post | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "solved" | "unsolved">("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "most_liked" | "most_replied">("newest");
@@ -69,7 +78,8 @@ const Community = () => {
       // Filtro por busca
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
-        return post.description.toLowerCase().includes(searchLower);
+        return post.description.toLowerCase().includes(searchLower) ||
+               post.profiles?.username?.toLowerCase().includes(searchLower);
       }
 
       return true;
@@ -81,9 +91,10 @@ const Community = () => {
         case "oldest":
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         case "most_liked":
-          return b.likes.length - a.likes.length;
+          return (b.likes?.length || 0) - (a.likes?.length || 0);
         case "most_replied":
-          return (b.replies[0]?.count || 0) - (a.replies[0]?.count || 0);
+          // Use optional chaining for replies access
+          return (b.replies?.[0]?.count || 0) - (a.replies?.[0]?.count || 0);
         case "newest":
         default:
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -151,6 +162,15 @@ const Community = () => {
   const handleSubmitPost = () => {
     if (!newPost.trim()) return;
     createPostMutation.mutate(newPost);
+  };
+  
+  const getUserDisplayName = (post: Post) => {
+    return post.profiles?.username || "Usuário Anônimo";
+  };
+
+  const getUserInitials = (post: Post) => {
+    const name = getUserDisplayName(post);
+    return name === "Usuário Anônimo" ? "?" : name.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -240,20 +260,23 @@ const Community = () => {
             <p className="text-destructive text-center">Erro ao carregar as perguntas.</p>
           ) : filteredAndSortedPosts.length > 0 ? (
             filteredAndSortedPosts.map((post) => {
-              const isLiked = user ? post.likes.some(like => like.user_id === user.id) : false;
+              const isLiked = user ? (post.likes || []).some(like => like.user_id === user.id) : false;
               const isAuthor = user?.id === post.user_id;
+              const replyCount = post.replies?.[0]?.count || 0;
+              
               return (
                 <Card key={post.id} className="glass-card border-gradient card-hover overflow-hidden group">
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10">
+                          <AvatarImage src={post.profiles?.avatar_url || undefined} />
                           <AvatarFallback className="bg-primary/10 text-primary">
-                            {post.user_id.substring(0, 2).toUpperCase()}
+                            {getUserInitials(post)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium text-foreground">Usuário</p>
+                          <p className="font-medium text-foreground">{getUserDisplayName(post)}</p>
                           <p className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ptBR })}
                           </p>
@@ -291,7 +314,7 @@ const Community = () => {
                           onClick={() => setViewingPost(post)}
                         >
                           <MessageSquare className="w-4 h-4" />
-                          {post.replies[0]?.count || 0} {post.replies[0]?.count === 1 ? 'resposta' : 'respostas'}
+                          {replyCount} {replyCount === 1 ? 'resposta' : 'respostas'}
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -301,7 +324,7 @@ const Community = () => {
                           disabled={!user || toggleLikeMutation.isPending}
                         >
                           <ThumbsUp className={cn("w-4 h-4", isLiked && "fill-current")} />
-                          {post.likes.length}
+                          {(post.likes || []).length}
                         </Button>
                       </div>
                       {isAuthor && !post.is_solved && (
