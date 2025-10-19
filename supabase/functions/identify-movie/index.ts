@@ -19,85 +19,78 @@ serve(async (req) => {
   }
 
   try {
-    console.log("--- identify-movie function invoked ---");
+    console.log("--- identify-movie function invoked (using Google Gemini API) ---");
     const { description } = await req.json();
     if (!description) {
       throw new Error("Descrição não fornecida.");
     }
     console.log("Descrição recebida:", description);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY");
 
-    if (!LOVABLE_API_KEY || !TMDB_API_KEY) {
-      console.error("ERRO: Chaves de API (LOVABLE_API_KEY ou TMDB_API_KEY) não configuradas nos segredos do Supabase.");
-      throw new Error("Chaves de API não configuradas no servidor.");
+    if (!GEMINI_API_KEY) {
+      console.error("ERRO: Chave de API (GEMINI_API_KEY) não configurada nos segredos do Supabase.");
+      throw new Error("Chave da API do Gemini não configurada no servidor.");
+    }
+    if (!TMDB_API_KEY) {
+      console.error("ERRO: Chave de API (TMDB_API_KEY) não configurada nos segredos do Supabase.");
+      throw new Error("Chave da API do TMDB não configurada no servidor.");
     }
     console.log("Chaves de API encontradas. Prosseguindo...");
 
-    // --- Passo 1: Chamar IA ---
-    console.log("Chamando a IA para obter títulos de filmes...");
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // --- Passo 1: Chamar a API do Google Gemini ---
+    console.log("Chamando a API do Google Gemini...");
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const prompt = `Você é um especialista em cinema. Sua tarefa é identificar filmes a partir de descrições de cenas.
+    Analise a seguinte descrição do usuário e retorne um objeto JSON com uma chave "titles", que contém um array de até 3 possíveis títulos de filmes em português.
+    Descrição do usuário: "${description}"
+    Exemplo de saída:
+    {
+      "titles": ["Matrix", "Duro de Matar", "Equilibrium"]
+    }
+    Responda APENAS com o objeto JSON.`;
+
+    const geminiResponse = await fetch(geminiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5-mini",
-        messages: [
-          {
-            role: "system",
-            content: `Você é um especialista em cinema. Sua tarefa é identificar filmes a partir de descrições de cenas.
-            Analise a descrição do usuário e retorne um objeto JSON com uma chave "titles", que contém um array de até 3 possíveis títulos de filmes em português.
-            Exemplo de entrada: "um homem de terno preto lutando em um prédio, câmera lenta, anos 90"
-            Exemplo de saída:
-            {
-              "titles": ["Matrix", "Duro de Matar", "Equilibrium"]
-            }
-            Responda APENAS com o objeto JSON.`
-          },
-          {
-            role: "user",
-            content: description
-          }
-        ],
-        response_format: { type: "json_object" },
+        contents: [{
+          parts: [{ "text": prompt }]
+        }],
+        generationConfig: {
+          "response_mime_type": "application/json",
+        }
       }),
     });
 
-    console.log(`Resposta da IA recebida com status: ${aiResponse.status}`);
+    console.log(`Resposta da Gemini API recebida com status: ${geminiResponse.status}`);
 
-    if (!aiResponse.ok) {
-      const errorBody = await aiResponse.text();
-      console.error("ERRO na chamada da IA. Corpo da resposta:", errorBody);
-      throw new Error(`A IA retornou um erro: ${aiResponse.status}`);
+    if (!geminiResponse.ok) {
+      const errorBody = await geminiResponse.text();
+      console.error("ERRO na chamada da Gemini API. Corpo da resposta:", errorBody);
+      throw new Error(`A Gemini API retornou um erro: ${geminiResponse.status}`);
     }
 
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices[0]?.message?.content;
+    const geminiData = await geminiResponse.json();
+    const rawContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!rawContent) {
-      console.error("ERRO: Resposta da IA não continha conteúdo:", JSON.stringify(aiData));
-      throw new Error("A IA não retornou um resultado válido.");
+      console.error("ERRO: Resposta da Gemini API não continha conteúdo:", JSON.stringify(geminiData));
+      throw new Error("A Gemini API não retornou um resultado válido.");
     }
-    console.log("Conteúdo bruto da IA:", rawContent);
+    console.log("Conteúdo bruto da Gemini API:", rawContent);
 
-    // --- Passo 2: Extrair e parsear JSON ---
-    console.log("Extraindo JSON da resposta da IA...");
-    const jsonMatch = rawContent.match(/{[\s\S]*}/);
-    if (!jsonMatch) {
-      console.error("ERRO: Nenhum JSON encontrado na resposta da IA.");
-      throw new Error("A IA não retornou um formato de dados reconhecível.");
-    }
-
-    const jsonString = jsonMatch[0];
+    // --- Passo 2: Parsear JSON ---
     let parsedContent;
     try {
-      parsedContent = JSON.parse(jsonString);
+      parsedContent = JSON.parse(rawContent);
     } catch (e) {
-      console.error("ERRO ao fazer parse do JSON extraído:", e, "JSON String:", jsonString);
-      throw new Error("A IA retornou um formato de dados inesperado.");
+      console.error("ERRO ao fazer parse do JSON da Gemini API:", e, "JSON String:", rawContent);
+      throw new Error("A Gemini API retornou um formato de dados inesperado.");
     }
     console.log("JSON parseado com sucesso.");
 
